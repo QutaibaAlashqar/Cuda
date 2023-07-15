@@ -1,0 +1,146 @@
+﻿// System includes
+
+#include <stdio.h>
+#include <assert.h>
+#include <stdlib.h>
+#include <time.h>
+
+// CUDA runtime
+#include <cuda_runtime.h>
+#include <cuda_profiler_api.h>
+
+#define SIZE 27300000
+
+
+__global__ void print_from_gpu(void){
+
+    printf("Hello World! from thread [%d,%d] From device\n", threadIdx.x, blockIdx.x);
+}
+
+
+__global__ void printBlocks(void){
+
+    int index = blockDim.x * blockIdx.x + threadIdx.x;
+    printf("thread:%d\n", index);
+}
+
+
+__global__ void device_add_vector(int* a, int* b, int* c){
+
+    int index = blockDim.x * blockIdx.x + threadIdx.x;
+    c[index] = a[index] + b[index];
+    //if (index == SIZE - 100) printf("%d\n", index);
+}
+
+
+int func(int thread);
+
+__global__ void device_add_vector2(int* a, int* b, int* c, int n){
+
+    int index = blockDim.x * blockIdx.x + threadIdx.x;
+    for (size_t i = (index - 1) * n; i < index * n && i < SIZE; i++){
+
+        c[i] = a[i] + b[i];
+    }
+}
+int funcblock(int block);
+
+int main(void){
+
+    int i;
+    i = 1;
+    while (i <= 64){
+        puts("");
+        func(i);
+        i = i * 2;
+    }
+
+    int key = 1;
+    while (key <= 64){
+        puts("");
+        funcblock(key);
+        key = key * 2;
+    }
+}
+
+
+int func(int thread){
+
+    // declaration
+    int n = SIZE;
+    int size = n * sizeof(int);
+    int T = thread;
+    int B = n / T; //fix this
+    int* x = (int*)malloc(size);
+    int* y = (int*)malloc(size);
+    int* c = (int*)malloc(size);
+    int* d_x; int* d_y; int* d_c;
+    cudaMalloc((void**)&d_x, size);
+    cudaMalloc((void**)&d_y, size);
+    cudaMalloc((void**)&d_c, size);
+
+    // filling the x and y vectors
+    for (size_t i = 0; i < n; i++){
+        x[i] = i * 2;
+    }
+    for (size_t i = 0; i < n; i++){
+        y[i] = i * 3;
+    }
+
+    cudaMemcpy(d_x, x, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, y, size, cudaMemcpyHostToDevice);
+
+    clock_t basla = clock();
+    device_add_vector << <B, T >> > (d_x, d_y, d_c);
+    cudaDeviceSynchronize();
+    clock_t bitir = clock();
+    printf("<<<B,T>>>\nB: %d, T: %d\n", B, T);
+    printf("basla: %d, bitis: %d, Zaman: %f\n", basla, bitir, (double)(bitir - basla) / CLOCKS_PER_SEC);
+    cudaMemcpy(c, d_c, size, cudaMemcpyDeviceToHost);
+    free(x); free(y); free(c);
+    cudaFree(d_x); cudaFree(d_y); cudaFree(d_c);
+    return 0;
+
+}
+
+int funcblock(int block){
+
+    // declaration
+    int n = SIZE;
+    int size = n * sizeof(int);
+
+    int B = block;
+    int T = n / B; //fix this
+
+    int* x = (int*)malloc(size);
+    int* y = (int*)malloc(size);
+    int* c = (int*)malloc(size);
+    int* d_x; int* d_y; int* d_c;
+    cudaMalloc((void**)&d_x, size);
+    cudaMalloc((void**)&d_y, size);
+    cudaMalloc((void**)&d_c, size);
+
+    // filling the x and y vectors
+    for (size_t i = 0; i < n; i++){
+        x[i] = i * 2;
+    }
+    for (size_t i = 0; i < n; i++){
+        y[i] = i * 3;
+    }
+
+    cudaMemcpy(d_x, x, size, cudaMemcpyHostToDevice);
+    cudaMemcpy(d_y, y, size, cudaMemcpyHostToDevice);
+
+    clock_t basla = clock();
+    device_add_vector << <B, T >> > (d_x, d_y, d_c);
+    cudaDeviceSynchronize();
+    clock_t bitir = clock();
+    printf("<<<B,T>>>\nB: %d, T: %d\n", B, T);
+    printf("basla: %d, bitis: %d, Zaman: %f\n", basla, bitir, (double)(bitir - basla) / CLOCKS_PER_SEC);
+    cudaMemcpy(c, d_c, size, cudaMemcpyDeviceToHost);
+
+    free(x); free(y); free(c);
+    cudaFree(d_x); cudaFree(d_y); cudaFree(d_c);
+
+    return 0;
+}
